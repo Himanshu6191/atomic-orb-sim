@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Schrödinger Orbital Cloud Simulator</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(15, 23, 42, 0.92);
+            --border-color: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-cr: #38bdf8;
+            --accent-cu: #f59e0b;
+        }
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-main);
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0; left: 0; z-index: 1;
+        }
+        #ui-panel {
+            position: absolute;
+            top: 20px; left: 20px; z-index: 10;
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            width: 390px;
+            backdrop-filter: blur(12px);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        h1 {
+            font-size: 1.15rem;
+            margin: 0 0 12px 0;
+            color: var(--accent-cr);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        button.element-btn {
+            flex: 1; padding: 10px; font-weight: 600; cursor: pointer;
+            border: 1px solid var(--border-color); border-radius: 6px;
+            background: #1e293b; color: var(--text-muted); transition: all 0.2s;
+            font-size: 0.95rem;
+        }
+        button.element-btn:hover {
+            background: #334155;
+            color: var(--text-main);
+        }
+        button.element-btn.active-cr {
+            background: #0284c7; color: white; border-color: var(--accent-cr);
+            box-shadow: 0 0 15px rgba(56,189,248,0.3);
+        }
+        button.element-btn.active-cu {
+            background: #d97706; color: white; border-color: var(--accent-cu);
+            box-shadow: 0 0 15px rgba(245,158,11,0.3);
+        }
+        .config-box {
+            background: #0f172a; padding: 12px; border-radius: 8px;
+            border-left: 4px solid var(--accent-cr); margin-bottom: 15px; font-size: 0.88rem;
+        }
+        .highlight {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.15rem; font-weight: bold; color: #4ade80;
+            display: block; margin: 6px 0;
+        }
+        .section-title {
+            font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted);
+            margin: 12px 0 8px 0; font-weight: bold; letter-spacing: 0.5px;
+        }
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            background: #1e293b;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+        .checkbox-label:hover { border-color: #475569; }
+        .checkbox-label input { cursor: pointer; accent-color: var(--accent-cr); }
+        
+        /* Energy Diagram */
+        .energy-diagram {
+            background: #1e293b; padding: 12px; border-radius: 8px;
+        }
+        .orbital-row {
+            display: flex; align-items: center; margin: 8px 0; font-family: monospace; font-size: 0.85rem;
+        }
+        .row-label { width: 35px; color: var(--text-muted); font-weight: bold; }
+        .boxes { display: flex; gap: 6px; }
+        .box {
+            width: 28px; height: 28px; border: 1px solid #64748b; background: #0f172a;
+            display: flex; align-items: center; justify-content: center;
+            color: #facc15; font-weight: bold; font-size: 0.85rem; border-radius: 4px;
+        }
+        .box.filled { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+        .box.half { border-color: #38bdf8; background: rgba(56, 189, 248, 0.1); }
+        
+        #instructions {
+            position: absolute; bottom: 20px; right: 20px; z-index: 10;
+            background: rgba(15,23,42,0.85); padding: 10px 16px; border-radius: 8px;
+            font-size: 0.8rem; color: var(--text-muted); pointer-events: none;
+            border: 1px solid var(--border-color);
+        }
+        .axis-legend {
+            display: flex; gap: 12px; font-size: 0.75rem; margin-top: 4px;
+        }
+        .axis-indicator { font-weight: bold; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="ui-panel">
+        <h1 id="panel-title">⚡ Probability Density View</h1>
+        
+        <div class="btn-group">
+            <button id="btn-cr" class="element-btn active-cr" onclick="switchElement('Cr')">Chromium (Z=24)</button>
+            <button id="btn-cu" class="element-btn" onclick="switchElement('Cu')">Copper (Z=29)</button>
+        </div>
+
+        <div class="config-box" id="info-box"></div>
+
+        <div class="section-title">Isolate Orbital Geometries</div>
+        <div class="checkbox-grid">
+            <label class="checkbox-label" style="grid-column: span 2; background: rgba(74, 222, 128, 0.15); border-color: #4ade80;">
+                <input type="checkbox" id="check-4s" checked onchange="toggleOrbital('4s')">
+                <b>4s Sphere</b> (Outer Boundary)
+            </label>
+            <label class="checkbox-label"><input type="checkbox" id="check-dxy" checked onchange="toggleOrbital('dxy')"> d<sub>xy</sub> Lobe</label>
+            <label class="checkbox-label"><input type="checkbox" id="check-dxz" checked onchange="toggleOrbital('dxz')"> d<sub>xz</sub> Lobe</label>
+            <label class="checkbox-label"><input type="checkbox" id="check-dyz" checked onchange="toggleOrbital('dyz')"> d<sub>yz</sub> Lobe</label>
+            <label class="checkbox-label"><input type="checkbox" id="check-dx2y2" checked onchange="toggleOrbital('dx2y2')"> d<sub>x²-y²</sub> Lobe</label>
+            <label class="checkbox-label" style="grid-column: span 2;"><input type="checkbox" id="check-dz2" checked onchange="toggleOrbital('dz2')"> d<sub>z²</sub> Lobe (Vertical Dumbbell + Torus)</label>
+        </div>
+
+        <div class="section-title">Subshell Occupancy & Density</div>
+        <div class="energy-diagram">
+            <div class="orbital-row">
+                <span class="row-label">3d</span>
+                <div class="boxes" id="boxes-3d"></div>
+            </div>
+            <div class="orbital-row">
+                <span class="row-label">4s</span>
+                <div class="boxes" id="boxes-4s"></div>
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
+                💡 <i>Notice: No orbiting beads. Electron presence is shown by cloud saturation. Half-filled lobes glow blue; fully paired lobes glow dense green/gold.</i>
+            </div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <div>Left Click + Drag to Rotate | Scroll to Zoom | Right Click to Pan</div>
+        <div class="axis-legend">
+            <span class="axis-indicator" style="color: #ef4444;">■ X-Axis (Red)</span>
+            <span class="axis-indicator" style="color: #22c55e;">■ Y-Axis (Green)</span>
+            <span class="axis-indicator" style="color: #3b82f6;">■ Z-Axis (Blue)</span>
+        </div>
+    </div>
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- 1. SCENE & CAMERA SETUP ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(28, 22, 35);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lighting
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const pLight = new THREE.PointLight(0xffffff, 1.2, 100);
+        pLight.position.set(15, 20, 20);
+        scene.add(pLight);
+        const pLight2 = new THREE.PointLight(0xffffff, 0.8, 100);
+        pLight2.position.set(-15, -20, -20);
+        scene.add(pLight2);
+
+        // --- 2. 3D COORDINATE AXES ---
+        // Thick cylinders for high visibility on projector screens
+        const createAxis = (color, rotationFn) => {
+            const mat = new THREE.MeshBasicMaterial({ color: color });
+            const geo = new THREE.CylinderGeometry(0.08, 0.08, 40, 8);
+            const mesh = new THREE.Mesh(geo, mat);
+            rotationFn(mesh);
+            scene.add(mesh);
+            return mesh;
+        };
+        createAxis(0xef4444, (m) => m.rotation.z = Math.PI/2); // X - Red
+        createAxis(0x22c55e, (m) => {});                       // Y - Green
+        createAxis(0x3b82f6, (m) => m.rotation.x = Math.PI/2); // Z - Blue
+
+        // Central Nucleus
+        const nucleus = new THREE.Mesh(
+            new THREE.SphereGeometry(1.2, 32, 32),
+            new THREE.MeshPhongMaterial({ color: 0xf87171, emissive: 0x991b1b, shininess: 100 })
+        );
+        scene.add(nucleus);
+
+        // --- 3. PROBABILITY CLOUD ORBITAL GEOMETRIES ---
+        const orbitalGroups = {};
+
+        // 4s Orbital: Outer Boundary Cloud
+        const sGeo = new THREE.SphereGeometry(13.5, 40, 40);
+        const sMat = new THREE.MeshPhongMaterial({ 
+            color: 0x4ade80, transparent: true, opacity: 0.12, wireframe: true 
+        });
+        const sOrbital = new THREE.Mesh(sGeo, sMat);
+        scene.add(sOrbital);
+        orbitalGroups['4s'] = { mesh: sOrbital, type: 's' };
+
+        // 3d Orbitals: Lobes (No moving electron beads)
+        const lobeGeo = new THREE.SphereGeometry(1.8, 24, 24);
+        lobeGeo.scale(1, 3.4, 1); // Transform sphere into elongated probability dumbbell
+
+        const createDOrbital = (name, eulerRotation) => {
+            const group = new THREE.Group();
+            // 4 symmetrical lobes per d-orbital
+            for (let i = 0; i < 4; i++) {
+                const mat = new THREE.MeshPhongMaterial({ 
+                    color: 0x38bdf8, transparent: true, opacity: 0.45, 
+                    emissive: 0x0284c7, emissiveIntensity: 0.3, shininess: 90 
+                });
+                const lobe = new THREE.Mesh(lobeGeo, mat);
+                lobe.position.y = 5.2; // Offset from nucleus
+                
+                const pivot = new THREE.Group();
+                pivot.add(lobe);
+                pivot.rotation.z = (i * Math.PI / 2);
+                group.add(pivot);
+            }
+            group.rotation.copy(eulerRotation);
+            scene.add(group);
+            orbitalGroups[name] = { mesh: group, type: 'd', lobes: group.children };
+            return group;
+        };
+
+        // Instantiate the 5 degenerate 3d orientations
+        createDOrbital('dxy', new THREE.Euler(0, 0, 0));
+        createDOrbital('dxz', new THREE.Euler(Math.PI/2, 0, 0));
+        createDOrbital('dyz', new THREE.Euler(0, Math.PI/2, Math.PI/2));
+        createDOrbital('dx2y2', new THREE.Euler(0, 0, Math.PI/4));
+
+        // d_z2: Special vertical dumbbell + equatorial torus
+        const dz2Group = new THREE.Group();
+        const dz2Mat = new THREE.MeshPhongMaterial({ 
+            color: 0x38bdf8, transparent: true, opacity: 0.45, 
+            emissive: 0x0284c7, emissiveIntensity: 0.3, shininess: 90 
+        });
+        const topLobe = new THREE.Mesh(lobeGeo, dz2Mat); topLobe.position.y = 5.5; dz2Group.add(topLobe);
+        const botLobe = new THREE.Mesh(lobeGeo, dz2Mat); botLobe.position.y = -5.5; dz2Group.add(botLobe);
+        const torus = new THREE.Mesh(new THREE.TorusGeometry(3.2, 1.1, 20, 40), dz2Mat);
+        torus.rotation.x = Math.PI/2; dz2Group.add(torus);
+        dz2Group.rotation.x = Math.PI/2; // Align along Z-axis (Blue)
+        scene.add(dz2Group);
+        orbitalGroups['dz2'] = { mesh: dz2Group, type: 'd', lobes: [topLobe, botLobe, torus] };
+
+        // --- 4. INTERACTIVE STATE & VISUAL DENSITY MODULATION ---
+        let currentElement = 'Cr';
+
+        function updateCloudDensity(element) {
+            const isCr = element === 'Cr';
+            
+            // In Cr (3d5), each d-orbital has 1 electron (Half-filled -> Moderate blue glow)
+            // In Cu (3d10), each d-orbital has 2 paired electrons (Fully-filled -> Dense gold/green glow)
+            const targetColor = isCr ? 0x38bdf8 : 0xfacc15;
+            const targetEmissive = isCr ? 0x0369a1 : 0xb45309;
+            const targetOpacity = isCr ? 0.40 : 0.65;
+            const targetIntensity = isCr ? 0.4 : 0.8;
+
+            Object.keys(orbitalGroups).forEach(key => {
+                if (key === '4s') return; // 4s is always 4s1 in both Cr and Cu anomalies
+                
+                const item = orbitalGroups[key];
+                item.lobes.forEach(child => {
+                    const mesh = child.type === 'Group' ? child.children[0] : child;
+                    mesh.material.color.setHex(targetColor);
+                    mesh.material.emissive.setHex(targetEmissive);
+                    mesh.material.opacity = targetOpacity;
+                    mesh.material.emissiveIntensity = targetIntensity;
+                });
+            });
+        }
+
+        function switchElement(el) {
+            currentElement = el;
+            const isCr = el === 'Cr';
+
+            // Button styling
+            const btnCr = document.getElementById('btn-cr');
+            const btnCu = document.getElementById('btn-cu');
+            btnCr.className = `element-btn ${isCr ? 'active-cr' : ''}`;
+            btnCu.className = `element-btn ${!isCr ? 'active-cu' : ''}`;
+
+            // Update info text
+            const configText = isCr ? "[Ar] 3d⁵ 4s¹" : "[Ar] 3d¹⁰ 4s¹";
+            const expText = isCr ? "[Ar] 3d⁴ 4s²" : "[Ar] 3d⁹ 4s²";
+            const explanation = isCr 
+                ? "<b>Half-Filled Symmetry (3d⁵):</b> Exactly 1 electron occupies each of the 5 degenerate spatial lobes. Notice the moderate, uniform cloud density. Spreading charge across all 3D axes minimizes electron-electron repulsion."
+                : "<b>Fully-Filled Symmetry (3d¹⁰):</b> Exactly 2 paired electrons occupy each lobe. Notice the thicker, brighter probability density. This complete, symmetrical charge sphere around the nucleus provides exceptional thermodynamic stability.";
+
+            document.getElementById('info-box').innerHTML = `
+                <div style="color: var(--text-muted);">Expected Aufbau: <span style="text-decoration:line-through;">${expText}</span></div>
+                <span class="highlight" style="color: ${isCr ? '#38bdf8' : '#facc15'};">${configText}</span>
+                <div style="margin-top:6px; line-height:1.45;">${explanation}</div>
+            `;
+
+            // Update UI title border color
+            document.getElementById('info-box').style.borderColor = isCr ? '#38bdf8' : '#f59e0b';
+            document.querySelector('h1').style.color = isCr ? '#38bdf8' : '#f59e0b';
+
+            // Update Energy Diagram Boxes
+            const boxes3d = document.getElementById('boxes-3d');
+            boxes3d.innerHTML = '';
+            for(let i = 0; i < 5; i++) {
+                const boxClass = isCr ? 'box half' : 'box filled';
+                const arrow = isCr ? '↑' : '↑↓';
+                boxes3d.innerHTML += `<div class="${boxClass}">${arrow}</div>`;
+            }
+            document.getElementById('boxes-4s').innerHTML = `<div class="box half">↑</div>`;
+
+            // Modulate 3D cloud density
+            updateCloudDensity(el);
+        }
+
+        function toggleOrbital(key) {
+            const checkbox = document.getElementById(`check-${key}`);
+            if (orbitalGroups[key]) {
+                orbitalGroups[key].mesh.visible = checkbox.checked;
+            }
+        }
+
+        // Initialize default state
+        switchElement('Cr');
+
+        // --- 5. ANIMATION & RESIZE LOOP ---
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+
+            // Gentle continuous rotation of the entire atomic scene to showcase 3D depth
+            scene.rotation.y = time * 0.12;
+            
+            // Subtle breathing effect on the outer 4s boundary sphere
+            if (orbitalGroups['4s'].mesh.visible) {
+                const scale = 1 + Math.sin(time * 2) * 0.02;
+                orbitalGroups['4s'].mesh.scale.set(scale, scale, scale);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
